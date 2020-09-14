@@ -75,25 +75,27 @@ month
 '''
 
 df_amp_recommended = bq.cached_read(sql, csv_path=os.path.join('..','data','df_amp_recommended.zip'))
+#df_amp_recommended = bq.cached_read(sql, csv_path=os.path.join('..','data','df_amp_recommended.csv'))
 df_amp_recommended['month'] = df_amp_recommended['month'].astype('datetime64[ns]')
 df_amp_recommended.head(3)
 # -
 
+#lets graph to see the total number of items over time
 df_amp_recommended.groupby("month")['total_items'].sum().plot(kind='line', title="Total items where AMP recommended by NHS dm+d")
 plt.ylim(0, )
 
-df_generic = df_amp_recommended.loc[df_amp_recommended["bnf_code"].str.contains('AA')]
+#create dataframe with only generically prescribed items
+df_generic = df_amp_recommended.loc[df_amp_recommended["bnf_code"].str.contains('AA\w{4}$')]
 df_generic.head()
 
-df_generic = df_amp_recommended.loc[df_amp_recommended["bnf_code"].str.contains('AA\w{4}$')]
-df_generic.head(10)
-
-#checking here to see if this worked
+#output unique BNF codes to inspect for accuracy
 df_generic.bnf_code.unique()
 
+#plot breaches
 df_generic.groupby("month")['total_items'].sum().plot(kind='line', title="Total items where AMP recommended by NHS dm+d but prescribed generically \n in breach of guidance")
 plt.ylim(0, )
 
+#inspect top 25
 df_generic.groupby(['bnf_code', 'bnf_name']).sum().reset_index().sort_values(by = 'total_items', ascending = False).head(25)
 
 df_generic_ccg = df_generic.groupby(['month', 'pct']).sum().reset_index()
@@ -102,11 +104,10 @@ df_generic_ccg .head(3)
 df_amp_recommended_ccg = df_amp_recommended.groupby(['month', 'pct']).sum().reset_index()
 df_amp_recommended_ccg.head(3)
 
-# +
-df_measure = df_generic_ccg.copy()
-
-df_measure["measure_value"] = 100*(df_generic_ccg.total_items / df_amp_recommended_ccg.total_items).fillna(0)
+df_measure = pd.merge(df_generic_ccg, df_amp_recommended_ccg,  how='left', left_on=['month','pct'], right_on = ['month','pct'], suffixes=("_generic_rx", "_all_rx_rec_amp"))
+df_measure["measure_value"] = 100*(df_measure.total_items_generic_rx / df_measure.total_items_all_rx_rec_amp).fillna(0)
 df_measure.head()
+
 
 # +
 charts.deciles_chart(
@@ -114,7 +115,7 @@ charts.deciles_chart(
     period_column='month',
     column='measure_value',
     title=" CCG variation - Generic prescriptions \n in breach of dm+d brand prescribing recommendations",
-    ylabel="",
+    ylabel=" % ",
     show_outer_percentiles=True,
     show_legend=True
 ) 
